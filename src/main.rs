@@ -36,13 +36,17 @@ fn thermal(thermdir: &str) -> io::Result<()>
         //let file_name = f.file_name().into_string().unwrap();
         let file_path = f.to_str().unwrap();
         
+        
         if file_path.contains("thermal_zone"){
                 let file_name = file_path.strip_prefix(format!("{thermdir}/thermal_zone").as_str()).unwrap();
-                let mut temp = File::open(format!("{}/temp", file_path))?;
-                let mut tempbuf: [u8; 1] = [0; 1];
-                let _ = temp.read(&mut tempbuf);
+                //let mut temp = File::open(format!("{}/temp", file_path))?;
+                //let mut tempbuf: [u8; 5] = [0; 5];
+                //let _ = temp.read(&mut tempbuf);
+                let mut temp = fs::read_to_string(format!("{}/temp", file_path))?;
+                let mut tempi: i32 = temp.trim().parse().unwrap();
+                temp = (tempi / 1000).to_string();
 
-                println!("Thermal {}: {}C", file_name, tempbuf[0]);
+                println!("Thermal {}: {}C", file_name, temp);
         }
     }
    
