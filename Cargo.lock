@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "howdy"
-version = "0.1.0"
+name = "rsacpi"
+version = "0.2.0"
