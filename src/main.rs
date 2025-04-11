@@ -2,8 +2,27 @@
 //SPDX-License-Identifier: MIT
 
 use std::{fs::{self, read_dir}, io};
-use clap::Parser;
+ 
+struct Args {
 
+///Display battery information
+battery: bool,
+
+///Display AC adapter information
+ac: bool,
+
+///Display thermal information
+thermal: bool,
+
+///Display all the available information
+everything: bool,
+
+///help me
+help: bool,
+}
+
+
+///Displays battery information
 fn bat(dir: &str) -> Result<String, io::Error>
 {
     let entries: Vec<_> = read_dir(dir)?
@@ -29,7 +48,7 @@ fn bat(dir: &str) -> Result<String, io::Error>
     Err(io::Error::other("No batteries found"))
 }
 
-
+///iterates through thermdir and prints the temperature of all thermal zones
 fn thermal(thermdir: &str) -> Result<(), io::Error>
 {
     let mut found = false;
@@ -62,7 +81,8 @@ fn thermal(thermdir: &str) -> Result<(), io::Error>
     }
 }
 
-
+///Prints AC adapter information to stdout
+///acdir: The name of the directory which contains the AC adapter
 fn ac(acdir: &str) -> Result<String, io::Error> 
 {
     let no_ac: Result<String, io::Error> = Err(io::Error::other("No AC adapter found"));
@@ -99,34 +119,68 @@ fn ac(acdir: &str) -> Result<String, io::Error>
 }
 
 
+fn usage() {
+println!("Usage: rsacpi [OPTION]...\n\n\
+-b, --battery       Displays battery information\n\
+-t, --thermal       Displays temperatures from all thermal zones\n\
+-a, --ac            Displays AC adapter status\n\
+-e, --everything    Displays all available information\n\
+-h, --help          Displays this help information\n");
+}
+
+///poor argument reaping and sowing embolism (parse)
+fn parse() -> Args {
+
+    let mut ac: bool = false;
+    let mut battery: bool = false;
+    let mut thermal: bool = false;
+    let mut everything: bool = false;
+    let mut help: bool = false;
+    
+    
+    for arg in std::env::args() {
+        if arg.contains("--") {
+            if arg.contains("help"){
+                help = true;
+            }
+        } 
+        else if arg.contains("-")  {
+            if arg.contains("a") {
+                ac = true;
+            } else if arg.contains("b") {
+                battery = true;
+            } else if arg.contains("t") {
+                thermal = true;
+            } else if arg.contains("e") {
+                everything = true;
+            } else if arg.contains("h") {
+                help = true;
+            } else {
+                println!("Unknown argument {arg}");
+                help = true;
+            }
+        }
+            }
+
+
+    let opts = Args {battery:battery, thermal:thermal, ac:ac,
+                     everything:everything, help:help};
+    opts
+}
+
+
 fn main()
 {
     let pwdir = "/sys/class/power_supply";
+    let thdir = "/sys/class/thermal";
+       
+    let mut args = parse();
 
-    #[derive(Debug)]
-    #[derive(Parser)]
-    #[command(version, about, long_about = None)]
-    struct Args {
-
-    ///Display battery information
-    #[arg(short, long)]
-    battery: bool,
-
-    ///Display AC adapter information
-    #[arg(short, long)]
-    ac: bool,
-
-    ///Display thermal information
-    #[arg(short, long)]
-    thermal: bool,
-
-    ///Display all the available information
-    #[arg(short, long)]
-    everything: bool
+    if args.help {
+        usage();
+        return;
     }
     
-    let mut args = Args::parse();
- 
     if args.everything {
         args.battery = true; args.ac = true; args.thermal = true;
     }
@@ -145,7 +199,7 @@ fn main()
         }
     }
     if args.thermal {
-        thermal("/sys/class/thermal").unwrap_or_else(|e| println!("{e}"));
+        thermal(thdir).unwrap_or_else(|e| println!("{e}"));
     }
     
     
