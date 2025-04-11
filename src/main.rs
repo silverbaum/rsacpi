@@ -1,26 +1,26 @@
-use std::{fs::{self, read_dir}, io, env};
+use std::{fs::{self, read_dir, DirEntry}, io, env};
 
 
 fn bat(dir: &str) -> Result<String, io::Error>
 {
-    for entry_r in read_dir(dir)? {
-        let entry = entry_r?;
+    let entries = read_dir(dir)?;
+
+    let en = entries
+            .filter(|entry| entry.as_ref().unwrap().file_name().to_str().unwrap().contains("BAT") ||
+                            entry.as_ref().unwrap().file_name().to_str().unwrap().contains("bat"))
+            .collect::<Result<Vec<DirEntry>, io::Error>>()?;
+
+    
+    for entry in en.iter() {
         let file_namebuf = entry.file_name();
         let file_name = file_namebuf.to_str().unwrap_or("Error in to_str");
+        //println!("Found {} with path {}", file_name, entry.path().to_string_lossy());
+        let capacity = fs::read_to_string(format!("{}/capacity", entry.path().to_str().unwrap()))?;
+        let cap: i32 = capacity.trim().parse().unwrap();
+        let status = match fs::read_to_string(format!("{}/status", entry.path().to_string_lossy())) {
+        Ok(str) => str, Err(_) => "Unknown".to_owned()};
 
-        if file_name.contains("BAT") || file_name.contains("bat") && entry.file_type()?.is_dir() 
-        {
-                //println!("Found {} with path {}", file_name, entry.path().to_string_lossy());
-                let capacity = fs::read_to_string(format!("{}/capacity", entry.path().to_str().unwrap()))?;
-                //let mut capbuf: [u8; 1] = [0; 1];
-                //let _ = capacity.read(&mut capbuf);
-                let cap: i32 = capacity.trim().parse().unwrap();
-                let status = match fs::read_to_string(format!("{}/status", entry.path().to_string_lossy())) {
-                Ok(str) => str, Err(_) => "Unknown".to_owned()};
-
-                return Ok(String::from( format!("{file_name}: {}%, {}", cap, status) ));
-
-        }
+        return Ok(String::from( format!("{file_name}: {}%, {}", cap, status) ));
     }
 
     Err(io::Error::other("No batteries found"))
@@ -29,32 +29,31 @@ fn bat(dir: &str) -> Result<String, io::Error>
 
 fn thermal(thermdir: &str) -> Result<(), io::Error>
 {
-    let mut found: bool = false;
+    let mut found = false;
+
+
     let mut entries = read_dir(thermdir)?
                     .map(|i| i.map(|e| e.path().to_owned()))
                     .collect::<Result<Vec<_>, io::Error>>()?;
-
     entries.sort();
 
-   // let mut batteries = Vec::<String>::new;
-    
-    for f in entries.iter() {
-        let file_path = f.to_str().unwrap_or("err: to_str");
+    let files = entries.iter().map(|f| f.to_str().unwrap_or("err: to_str"))
+                .filter(|path| path.contains("thermal_zone"))
+                .collect::<Vec<&str>>();
+                    
+    for f in files.iter() {
+        let num = f.strip_prefix(format!("{thermdir}/thermal_zone").as_str()).unwrap();
+        let temp: String = fs::read_to_string(format!("{}/temp", f))?;
+        let tempi: f32 = match temp.trim().parse::<f32>() {
+        Ok(n) => n/1000.0,
+        Err(_) => 0.0
+        };
         
-        if file_path.contains("thermal_zone") {
-                found = true;
-                let file_name: &str = file_path.strip_prefix(format!("{thermdir}/thermal_zone").as_str()).unwrap();
-                let temp: String = fs::read_to_string(format!("{}/temp", file_path))?;
-                let tempi: f32 = match temp.trim().parse::<f32>() {
-                    Ok(n) => n/1000.0,
-                    Err(_) => 0.0
-                };
-
-                println!("Thermal {}: {:.1} C°", file_name, tempi);
-        }
+        println!("Thermal {}: {:.1} C°", num, tempi);
+        found = true;
     }
-
-    match found {
+    
+    match found{
     true => Ok(()),
     false => Err(io::Error::other("No thermals found"))
     }
@@ -136,6 +135,7 @@ fn main()
         Err(e) => println!("{e}")
         
         }
+
     } else if args[1].contains("A") {
         
         match bat(batdir) {
