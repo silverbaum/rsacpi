@@ -1,22 +1,25 @@
-use std::{fs::{self, read_dir, DirEntry}, io, env};
+//Copyright (C) 2025 Topias Silfverhuth
+//SPDX-License-Identifier: MIT
 
+use std::{fs::{self, read_dir}, io};
+use clap::Parser;
 
 fn bat(dir: &str) -> Result<String, io::Error>
 {
-    let entries = read_dir(dir)?;
+    let entries: Vec<_> = read_dir(dir)?
+                .map(|e| {e.unwrap_or_else(|er| panic!("{er}"))})
+                .filter(|entry| {
+                    entry.file_name().to_string_lossy().contains("BAT") 
+                 || entry.file_name().to_string_lossy().contains("bat")
+                })
+                .collect();
 
-    let en = entries
-            .filter(|entry| entry.as_ref().unwrap().file_name().to_str().unwrap().contains("BAT") ||
-                            entry.as_ref().unwrap().file_name().to_str().unwrap().contains("bat"))
-            .collect::<Result<Vec<DirEntry>, io::Error>>()?;
-
-    
-    for entry in en.iter() {
+        
+    for entry in entries.iter() {
         let file_namebuf = entry.file_name();
-        let file_name = file_namebuf.to_str().unwrap_or("Error in to_str");
-        //println!("Found {} with path {}", file_name, entry.path().to_string_lossy());
-        let capacity = fs::read_to_string(format!("{}/capacity", entry.path().to_str().unwrap()))?;
-        let cap: i32 = capacity.trim().parse().unwrap();
+        let file_name = file_namebuf.to_str().expect("to_str");
+        let capacity = fs::read_to_string(format!("{}/capacity", entry.path().to_str().expect("to_str")))?;
+        let cap: i32 = capacity.trim().parse().expect("Failed to convert to an integer");
         let status = match fs::read_to_string(format!("{}/status", entry.path().to_string_lossy())) {
         Ok(str) => str, Err(_) => "Unknown".to_owned()};
 
@@ -95,64 +98,60 @@ fn ac(acdir: &str) -> Result<String, io::Error>
       no_ac
 }
 
-fn help() 
-{
-println!("rsacpi [OPTION]\n\n\
--b  Display Battery information\n\
--a  Display AC adapter information\n\
--t  Display thermal zone temperatures\n\
--A  Prints all available information\n\
--h  Display this help information and exit")
-}
-
 
 fn main()
 {
-    let batdir = "/sys/class/power_supply";
+    let pwdir = "/sys/class/power_supply";
+
+    #[derive(Debug)]
+    #[derive(Parser)]
+    #[command(version, about, long_about = None)]
+    struct Args {
+
+    ///Display battery information
+    #[arg(short, long)]
+    battery: bool,
+
+    ///Display AC adapter information
+    #[arg(short, long)]
+    ac: bool,
+
+    ///Display thermal information
+    #[arg(short, long)]
+    thermal: bool,
+
+    ///Display all the available information
+    #[arg(short, long)]
+    everything: bool
+    }
     
-    let args: Vec<String> = env::args().collect();
-    if args.len() == 1 {
-        match bat(batdir) {
-        Ok(str) => print!("{str}"),
-        Err(e) => println!("{e}")
-        }
-        return;
+    let mut args = Args::parse();
+ 
+    if args.everything {
+        args.battery = true; args.ac = true; args.thermal = true;
     }
 
-    if args[1].contains("b") {
-        
-        match bat(batdir) {
+    if args.battery ||
+    (!args.battery && !args.ac && !args.everything && !args.thermal){
+        match bat(pwdir) {
         Ok(str) => print!("{str}"),
         Err(e) => println!("{e}")
         }
-
-    } else if args[1].contains("t") {
-        thermal("/sys/class/thermal").unwrap_or_else(|e| println!("{e}"));
-    } else if args[1].contains("a") {
-        
-        match ac("/sys/class/power_supply") {
-        Ok(str) => println!("{str}"),
-        Err(e) => println!("{e}")
-        
-        }
-
-    } else if args[1].contains("A") {
-        
-        match bat(batdir) {
-        Ok(str) => print!("{str}"),
-        Err(e) => println!("{e}")
-        }
-        
-        match ac(batdir) {
-        Ok(str) => println!("{str}"),
-        Err(e) => println!("{e}"),
-        }
-
-        thermal("/sys/class/thermal").unwrap_or_else(|e| println!("{e}"));
-
-    } else if args[1].contains("h") {
-        let _ = help();
     }
+    if args.ac {
+        match ac(pwdir) {
+        Ok(str) => println!("{str}"),
+        Err(e) => println!("{e}")
+        }
+    }
+    if args.thermal {
+        thermal("/sys/class/thermal").unwrap_or_else(|e| println!("{e}"));
+    }
+    
+    
+
+    
+    
 
     
 }
