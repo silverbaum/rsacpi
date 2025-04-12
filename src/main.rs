@@ -4,27 +4,27 @@
 use std::{fs::{self, read_dir}, io};
  
 struct Args {
-
 ///Display battery information
 battery: bool,
-
 ///Display AC adapter information
 ac: bool,
-
 ///Display thermal information
 thermal: bool,
-
 ///Display all the available information
 everything: bool,
-
 ///help me
 help: bool,
 }
 
+static PWDIR: &str = "/sys/class/power_supply";
+static THDIR: &str = "/sys/class/thermal";
 
 ///Displays battery information
 fn bat(dir: &str) -> Result<String, io::Error>
 {
+        
+    //let mut fields: Vec<Batf> = vec![ Batf {field:"capacity", info:"".to_owned()}, Batf {field: "status", info:"".to_owned()}];
+
     let entries: Vec<_> = read_dir(dir)?
                 .map(|e| {e.unwrap_or_else(|er| panic!("{er}"))})
                 .filter(|entry| {
@@ -37,12 +37,35 @@ fn bat(dir: &str) -> Result<String, io::Error>
     for entry in entries.iter() {
         let file_namebuf = entry.file_name();
         let file_name = file_namebuf.to_str().expect("to_str");
-        let capacity = fs::read_to_string(format!("{}/capacity", entry.path().to_str().expect("to_str")))?;
-        let cap: i32 = capacity.trim().parse().expect("Failed to convert to an integer");
-        let status = match fs::read_to_string(format!("{}/status", entry.path().to_string_lossy())) {
-        Ok(str) => str, Err(_) => "Unknown".to_owned()};
 
-        return Ok(String::from( format!("{file_name}: {}%, {}", cap, status) ));
+        let capacity_r = fs::read_to_string(format!("{}/capacity", entry.path().to_str().expect("to_str")))?;
+        let capacity: i32 = capacity_r.trim().parse().expect("Failed to convert to an integer");
+        
+        let status_r = match fs::read_to_string(format!("{}/status", entry.path().to_string_lossy())) {
+                        Ok(str) => str,
+                        Err(_) => "Unknown".to_owned()
+                        };
+        let status: &str = status_r.trim();
+
+        let energy_r = fs::read_to_string(format!("{}/energy_now", entry.path().to_str().expect("to_str: energy_now not found")))?;
+        let energy: i64 = energy_r.trim().parse().expect("energy_now should be an integer");
+            
+        let power_r = fs::read_to_string(format!("{}/power_now", entry.path().to_str().unwrap_or("oh no")))?;
+        let power: i64 = power_r.trim().parse().expect("power_now should be an integer");
+        
+        if energy > 0 && power > 0 && status == "Discharging" {
+
+            let seconds: i64 = 3600 * energy / power;
+            if seconds > 0 {
+                let hours = seconds / 3600;
+                let minutes = (seconds % 3600) / 60;
+    
+                let remaining = format!("{}h {}m", hours, minutes);
+                return Ok(String::from( format!("{file_name}: {}%, {}, {} remaining", capacity, status, remaining) ));
+            }
+        }
+
+        return Ok(String::from( format!("{file_name}: {}%, {}", capacity, status) ));
     }
 
     Err(io::Error::other("No batteries found"))
@@ -171,8 +194,6 @@ fn parse() -> Args {
 
 fn main()
 {
-    let pwdir = "/sys/class/power_supply";
-    let thdir = "/sys/class/thermal";
        
     let mut args = parse();
 
@@ -187,19 +208,19 @@ fn main()
 
     if args.battery ||
     (!args.battery && !args.ac && !args.everything && !args.thermal){
-        match bat(pwdir) {
-        Ok(str) => print!("{str}"),
+        match bat(PWDIR) {
+        Ok(str) => println!("{str}"),
         Err(e) => println!("{e}")
         }
     }
     if args.ac {
-        match ac(pwdir) {
+        match ac(PWDIR) {
         Ok(str) => println!("{str}"),
         Err(e) => println!("{e}")
         }
     }
     if args.thermal {
-        thermal(thdir).unwrap_or_else(|e| println!("{e}"));
+        thermal(THDIR).unwrap_or_else(|e| println!("{e}"));
     }
     
     
@@ -209,3 +230,82 @@ fn main()
 
     
 }
+
+
+
+#[cfg(test)]
+mod tests {
+use super::*;
+
+    #[test]
+    fn battery() {
+        let msg = bat(PWDIR).unwrap();
+        assert!(msg.contains("%"));
+    }
+
+    #[test]
+    fn battery_err() {
+
+        let result =  bat("/sys/class/thermal");
+
+        println!("{:?}", result);
+        let e = match result {
+        Ok(str) => format!("{str}"),
+        Err(_) => format!("Error")
+        };
+        
+        
+        assert_eq!(e, "Error");
+    }
+
+    #[test]
+    fn adapter() {
+        ac(PWDIR).unwrap();
+    }
+
+    #[test]
+    fn adapter_err() {
+        let result =  ac("/sys/class/thermal");
+
+        println!("{result:?}");
+
+        let e = match result {
+        Ok(str) => format!("{str}"),
+        Err(_) => format!("Error")
+        };
+
+        assert_eq!("Error", e);
+    }
+
+    #[test]
+    fn thermals() {
+        let result = thermal(THDIR);
+        
+        let e = match result {
+        Ok(_) => "passed",
+        Err(_) => "failed"
+        };
+
+        assert_eq!(e, "passed")
+    }
+
+    #[test]
+    fn thermals_err() {
+        let result = thermal(PWDIR);
+
+        let e = match result {
+        Ok(_) => "failed",
+        Err(_) => "passed"
+        };
+
+        assert_eq!(e, "passed")
+    }
+
+
+
+}
+
+
+
+
+

@@ -1,6 +1,6 @@
 [package]
 name = "rsacpi"
 description = "A simple command-line tool to display battery, ac, and thermal information"
-version = "0.2.2"
+version = "0.2.3"
 license = "MIT"
 edition = "2024"
