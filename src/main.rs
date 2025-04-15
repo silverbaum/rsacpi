@@ -24,8 +24,10 @@ const PWDIR: &str = "/sys/class/power_supply";
 const THDIR: &str = "/sys/class/thermal";
 
 ///Displays battery information
-fn bat(dir: &str) -> Result<String, io::Error>
+fn bat(dir: &str) -> Result<Vec<String>, io::Error>
 {
+    let mut batteries: Vec<String> = Vec::new();
+    let mut found = false;
 
     let entries: Vec<_> = read_dir(dir)?
                 .map(|e| {e.unwrap_or_else(|er| panic!("{er}"))})
@@ -81,20 +83,27 @@ fn bat(dir: &str) -> Result<String, io::Error>
                 let minutes = (seconds % 3600) / 60;
     
                 let remaining = format!("{}h {}m", hours, minutes);
-                return Ok(String::from( format!("{file_name}: {}%, {}, {} remaining", capacity, status, remaining) ));
+                batteries.push(String::from( format!("{file_name}: {}%, {}, {} remaining", capacity, status, remaining) ));
             }
-        }
+        } else {
 
-        return Ok(String::from( format!("{file_name}: {}%, {}", capacity, status) ));
+            batteries.push(String::from( format!("{file_name}: {}%, {}", capacity, status) ));
+        }
+        found = true;
     }
 
-    Err(io::Error::other("No batteries found"))
+    match found {
+    true => Ok(batteries),
+    false => Err(io::Error::other("No batteries found"))
+    }
 }
 
 ///iterates through thermdir and prints the temp of all thermal zones
-fn thermal(thermdir: &str) -> Result<(), io::Error>
+fn thermal(thermdir: &str) -> Result<Vec<String>, io::Error>
 {
     let mut found = false;
+
+    let mut temps: Vec<String> = Vec::new();
 
 
     let mut entries = read_dir(thermdir)?
@@ -114,12 +123,12 @@ fn thermal(thermdir: &str) -> Result<(), io::Error>
         Err(_) => 0.0
         };
         
-        println!("Thermal {}: {:.1} C°", num, tempi);
+        temps.push(format!("Thermal {}: {:.1} C°", num, tempi));
         found = true;
     }
     
     match found{
-    true => Ok(()),
+    true => return Ok(temps),
     false => Err(io::Error::other("No thermals found"))
     }
 }
@@ -252,7 +261,10 @@ fn main() -> io::Result<()>
     if args.battery ||
     (!args.battery && !args.ac && !args.everything && !args.thermal){
         match bat(PWDIR) {
-        Ok(str) => println!("{str}"),
+        Ok(str) => {
+            for bat in str {
+                println!("{bat}");
+            }},
         Err(e) => println!("{e}")
         }
     }
@@ -264,7 +276,11 @@ fn main() -> io::Result<()>
     }
     if args.thermal {
         match thermal(THDIR) {
-        Ok(_) => (),
+        Ok(temps) => {
+            for temp in temps {
+                println!("{temp}");
+            }
+        },
         Err(e) => return Err(io::Error::other(e))
         }
     }
@@ -280,8 +296,14 @@ use super::*;
 
     #[test]
     fn battery() {
+        let mut pc: usize = 0;
         let msg = bat(PWDIR).unwrap();
-        assert!(msg.contains("%"));
+        for bat in &msg {
+            if bat.contains("%") {
+                pc += 1;
+            }
+        }
+        assert!(pc == msg.len());
     }
 
     #[test]
@@ -291,12 +313,11 @@ use super::*;
 
         println!("{:?}", result);
         let e = match result {
-        Ok(str) => format!("{str}"),
-        Err(_) => format!("Error")
+        Ok(_) => false,
+        Err(_) => true
         };
         
-        
-        assert_eq!(e, "Error");
+        assert!(e);
     }
 
     #[test]
