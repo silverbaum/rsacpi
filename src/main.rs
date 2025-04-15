@@ -43,8 +43,20 @@ fn bat(dir: &str) -> Result<Vec<String>, io::Error>
         let file_name = file_namebuf.to_str().unwrap();
 
         //TODO: add pattern matching with additional attempt to read capacity to buffer instead of string
-        let capacity_r = fs::read_to_string(format!("{}/capacity", entry.path().to_str().expect("to_str")))?;
-        let capacity: i32 = capacity_r.trim().parse().expect("Failed to convert capacity to an integer");
+        let cap_path = format!("{}/capacity", entry.path().to_str().unwrap_or("/sys/class/power_supply/BAT0/capacity"));
+        let capacity_r = fs::read_to_string(&cap_path)?;
+        let capacity: i32 = match capacity_r.trim().parse() {
+            Ok(cap) => cap,
+            Err(_) => {
+                let capbuf = fs::read(cap_path)?;
+                let res: i32 = unsafe {(*capbuf.align_to::<i32>().1)[0]};
+                if res >= 0 {
+                    res
+                } else {
+                    -1
+                }
+            }
+        };
         
         let status_r = match fs::read_to_string(format!("{}/status", entry.path().to_string_lossy())) {
                         Ok(str) => str,
@@ -86,8 +98,9 @@ fn bat(dir: &str) -> Result<Vec<String>, io::Error>
                 batteries.push(String::from( format!("{file_name}: {}%, {}, {} remaining", capacity, status, remaining) ));
             }
         } else {
-
-            batteries.push(String::from( format!("{file_name}: {}%, {}", capacity, status) ));
+            if capacity >= 0 {
+                batteries.push(String::from( format!("{file_name}: {}%, {}", capacity, status) ));
+            }
         }
         found = true;
     }
