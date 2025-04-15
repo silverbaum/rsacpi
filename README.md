@@ -8,3 +8,4 @@ Options:
 * -a,  --ac            Displays AC adapter status
 * -e,  --everything    Displays all available information
 * -h,  --help          Displays these command-line options
+* -v,  --version       Displays version and license information

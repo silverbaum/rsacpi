@@ -2,7 +2,9 @@
 //SPDX-License-Identifier: MIT
 
 use std::{fs::{self, read_dir}, io};
- 
+
+const VERSION: &str = "0.3.0";
+
 struct Args {
 ///Display battery information
 battery: bool,
@@ -14,16 +16,16 @@ thermal: bool,
 everything: bool,
 ///help me
 help: bool,
+///Version and license information
+version: bool
 }
 
-static PWDIR: &str = "/sys/class/power_supply";
-static THDIR: &str = "/sys/class/thermal";
+const PWDIR: &str = "/sys/class/power_supply";
+const THDIR: &str = "/sys/class/thermal";
 
 ///Displays battery information
 fn bat(dir: &str) -> Result<String, io::Error>
 {
-        
-    //let mut fields: Vec<Batf> = vec![ Batf {field:"capacity", info:"".to_owned()}, Batf {field: "status", info:"".to_owned()}];
 
     let entries: Vec<_> = read_dir(dir)?
                 .map(|e| {e.unwrap_or_else(|er| panic!("{er}"))})
@@ -36,10 +38,11 @@ fn bat(dir: &str) -> Result<String, io::Error>
         
     for entry in entries.iter() {
         let file_namebuf = entry.file_name();
-        let file_name = file_namebuf.to_str().expect("to_str");
+        let file_name = file_namebuf.to_str().unwrap();
 
+        //TODO: add pattern matching with additional attempt to read capacity to buffer instead of string
         let capacity_r = fs::read_to_string(format!("{}/capacity", entry.path().to_str().expect("to_str")))?;
-        let capacity: i32 = capacity_r.trim().parse().expect("Failed to convert to an integer");
+        let capacity: i32 = capacity_r.trim().parse().expect("Failed to convert capacity to an integer");
         
         let status_r = match fs::read_to_string(format!("{}/status", entry.path().to_string_lossy())) {
                         Ok(str) => str,
@@ -47,12 +50,29 @@ fn bat(dir: &str) -> Result<String, io::Error>
                         };
         let status: &str = status_r.trim();
 
-        let energy_r = fs::read_to_string(format!("{}/energy_now", entry.path().to_str().expect("to_str: energy_now not found")))?;
-        let energy: i64 = energy_r.trim().parse().expect("energy_now should be an integer");
+
+        //read raw charge and power consumption for time estimate
+        let energy_path = format!("{}/energy_now", entry.path().to_str().expect("Failed to convert to string"));
+        let energy_r = fs::read_to_string(&energy_path)?;
+        let energy: i64 = match energy_r.trim().parse() {
+            Ok(int) => int,
+            Err(_) => {
+                let reader = fs::read(&energy_path)?;
+                let res: i64 = unsafe {(*reader.align_to::<i64>().1)[0]};
+                if res >= 0 {
+                    res
+                } else {
+                    -1
+                }
+            }};
             
-        let power_r = fs::read_to_string(format!("{}/power_now", entry.path().to_str().unwrap_or("oh no")))?;
-        let power: i64 = power_r.trim().parse().expect("power_now should be an integer");
-        
+        let power_r = fs::read_to_string(format!("{}/power_now", entry.path().to_str().unwrap_or_else(|| "oh no")));
+        let power: i64 = match power_r {
+            Ok(power_r) => power_r.trim().parse().unwrap_or_else(|_| -1),
+            Err(_) => -1
+        };
+
+        //shows estimate of time remaining
         if energy > 0 && power > 0 && status == "Discharging" {
 
             let seconds: i64 = 3600 * energy / power;
@@ -71,7 +91,7 @@ fn bat(dir: &str) -> Result<String, io::Error>
     Err(io::Error::other("No batteries found"))
 }
 
-///iterates through thermdir and prints the temperature of all thermal zones
+///iterates through thermdir and prints the temp of all thermal zones
 fn thermal(thermdir: &str) -> Result<(), io::Error>
 {
     let mut found = false;
@@ -105,6 +125,7 @@ fn thermal(thermdir: &str) -> Result<(), io::Error>
 }
 
 ///Prints AC adapter information to stdout
+///
 ///acdir: The name of the directory which contains the AC adapter
 fn ac(acdir: &str) -> Result<String, io::Error> 
 {
@@ -148,7 +169,17 @@ println!("Usage: rsacpi [OPTION]...\n\n\
 -t, --thermal       Displays temperatures from all thermal zones\n\
 -a, --ac            Displays AC adapter status\n\
 -e, --everything    Displays all available information\n\
--h, --help          Displays this help information\n");
+-h, --help          Displays command-line options\n\
+-v, --version       Displays version and license information");
+}
+
+fn version() {
+println!("rsacpi {VERSION}\n\
+a simple tool to display battery, AC, and thermal info\n\
+Copyright (C) 2025 Topias Silfverhuth\n\
+License: MIT <https://opensource.org/license/mit>\n\
+This is free software: you are free to change and redistribute it.\n\
+There is NO WARRANTY, to the extent permitted by law.");
 }
 
 ///poor argument reaping and sowing embolism (parse)
@@ -159,15 +190,24 @@ fn parse() -> Args {
     let mut thermal: bool = false;
     let mut everything: bool = false;
     let mut help: bool = false;
-    
+    let mut version: bool = false;
     
     for arg in std::env::args() {
-        if arg.contains("--") {
+        if arg.contains("--") && arg.starts_with("--") {
             if arg.contains("help"){
                 help = true;
+            } else if arg.contains("battery") {
+                battery = true;
+            } else if arg.contains("thermal") {
+                thermal = true;
+            } else if arg.contains("everything") {
+                everything = true;
+            } else if arg.contains("ac") {
+                ac = true;
+            } else if arg.contains("version") {
+                version = true;
             }
-        } 
-        else if arg.contains("-")  {
+        } else if arg.contains("-") && arg.starts_with("-") && !arg.starts_with("--") {
             if arg.contains("a") {
                 ac = true;
             } else if arg.contains("b") {
@@ -178,6 +218,8 @@ fn parse() -> Args {
                 everything = true;
             } else if arg.contains("h") {
                 help = true;
+            } else if arg.contains("v") {
+                version = true;
             } else {
                 println!("Unknown argument {arg}");
                 help = true;
@@ -186,20 +228,21 @@ fn parse() -> Args {
             }
 
 
-    let opts = Args {battery:battery, thermal:thermal, ac:ac,
-                     everything:everything, help:help};
-    opts
+    Args {battery, ac, thermal, everything, help, version}
 }
 
 
-fn main()
+fn main() -> io::Result<()>
 {
        
     let mut args = parse();
 
     if args.help {
         usage();
-        return;
+        return Ok(());
+    } else if args.version {
+        version();
+        return Ok(());
     }
     
     if args.everything {
@@ -220,15 +263,13 @@ fn main()
         }
     }
     if args.thermal {
-        thermal(THDIR).unwrap_or_else(|e| println!("{e}"));
+        match thermal(THDIR) {
+        Ok(_) => (),
+        Err(e) => return Err(io::Error::other(e))
+        }
     }
     
-    
-
-    
-    
-
-    
+    Ok(())
 }
 
 
@@ -282,11 +323,11 @@ use super::*;
         let result = thermal(THDIR);
         
         let e = match result {
-        Ok(_) => "passed",
-        Err(_) => "failed"
+        Ok(_) => true,
+        Err(_) => false
         };
 
-        assert_eq!(e, "passed")
+        assert!(e)
     }
 
     #[test]
@@ -294,11 +335,17 @@ use super::*;
         let result = thermal(PWDIR);
 
         let e = match result {
-        Ok(_) => "failed",
-        Err(_) => "passed"
+        Ok(_) => false,
+        Err(_) => true
         };
 
-        assert_eq!(e, "passed")
+        assert!(e)
+    }
+
+    #[test]
+    fn tst_main() {
+        let result = main();
+        assert!(result.is_ok())
     }
 
 
