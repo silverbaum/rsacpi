@@ -93,10 +93,7 @@ fn bat(dir: &str) -> Result<Vec<String>, io::Error>
 
         let cap_path = format!("{}/capacity", entry.path().to_str().unwrap_or("/sys/class/power_supply/BAT0/capacity"));
         let capacity_r = read_to_string(&cap_path)?;
-        let capacity: i32 = match capacity_r.trim().parse() {
-            Ok(cap) => cap,
-            Err(_) => -1
-        };
+        let capacity: i32 = capacity_r.trim().parse().unwrap_or(-1);
         
         let status_r = match read_to_string(format!("{}/status", entry.path().to_string_lossy())) {
                         Ok(str) => str,
@@ -120,9 +117,9 @@ fn bat(dir: &str) -> Result<Vec<String>, io::Error>
                 }
             }};
             
-        let power_r = read_to_string(format!("{}/power_now", entry.path().to_str().unwrap_or_else(|| "oh no")));
+        let power_r = read_to_string(format!("{}/power_now", entry.path().to_str().unwrap_or("oh no")));
         let power: i64 = match power_r {
-            Ok(power_r) => power_r.trim().parse().unwrap_or_else(|_| -1),
+            Ok(power_r) => power_r.trim().parse().unwrap_or(-1),
             Err(_) => -1
         };
 
@@ -135,19 +132,16 @@ fn bat(dir: &str) -> Result<Vec<String>, io::Error>
                 let minutes = (seconds % 3600) / 60;
     
                 let remaining = format!("{}h {}m", hours, minutes);
-                batteries.push(String::from( format!("{file_name}: {}%, {}, {} remaining", capacity, status, remaining) ));
+                batteries.push(format!("{file_name}: {}%, {}, {} remaining", capacity, status, remaining) );
             }
+        } else if capacity >= 0 {
+                batteries.push(format!("{file_name}: {}%, {}", capacity, status) );
         } else {
-            if capacity >= 0 {
-                batteries.push(String::from( format!("{file_name}: {}%, {}", capacity, status) ));
-            } else {
                 let capbuf = read(&cap_path)?;
                 let capstr = String::from_utf8(capbuf).unwrap();
-                batteries.push(String::from( format!("{file_name}: {}%, {}", capstr.trim(), status) ));
-
-                
+                batteries.push(format!("{file_name}: {}%, {}", capstr.trim(), status));
             }
-        }
+        
         found = true;
     }
 
@@ -187,7 +181,7 @@ fn thermal(thermdir: &str) -> Result<Vec<String>, io::Error>
     }
     
     match found{
-    true => return Ok(temps),
+    true => Ok(temps),
     false => Err(io::Error::other("No thermals found"))
     }
 }
@@ -212,14 +206,13 @@ fn ac(acdir: &str) -> Result<String, io::Error>
                 let ac_online = read_to_string(format!("{}/online", entry.path().to_str().unwrap()))?;
                 let ac_status: i32 = ac_online.trim().parse().unwrap();
 
-                let ac_str: &str;
-                match ac_status {
-                    1 => ac_str = "on-line",
-                    0 => ac_str = "off-line",
-                    _ => ac_str = "Unknown",
-                }
+                let ac_str: &str = match ac_status {
+                    1 => "on-line",
+                    0 => "off-line",
+                    _ => "Unknown",
+                };
 
-                return Ok(String::from(format!("{file_name}: {}", ac_str)));
+                return Ok(format!("{file_name}: {}", ac_str));
             }
             }
     
@@ -322,8 +315,7 @@ fn main() -> io::Result<()>
             args.battery = true; args.battery_health = true; args.ac = true; args.thermal = true;
     }
 
-    if args.battery ||
-    (!args.battery && !args.ac && !args.everything && !args.thermal && !args.battery_health){
+    if args.battery || !args.ac && !args.everything && !args.thermal && !args.battery_health {
             match bat(PWDIR) {
             Ok(str) => {
                 for bat in str {
@@ -333,12 +325,10 @@ fn main() -> io::Result<()>
             }
     }
     if args.battery_health {
-            match battery_design(PWDIR) {
-                Ok(vec) => for bat in vec {
-                    println!("{bat}");
-                },
-                Err(_) => ()
-            }
+            if let Ok(vec) = battery_design(PWDIR) { for bat in vec {
+                println!("{bat}");
+            } }
+            
     }
 
     if args.ac {
