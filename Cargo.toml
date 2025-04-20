@@ -4,5 +4,6 @@ description = "A simple command-line tool to display battery, ac, and thermal in
 version = "0.4.1"
 repository = "https://github.com/silverbaum/rsacpi"
 license = "MIT"
-keywords = ["command-line-utilities"]
+keywords = ["battery", "CLI"]
+categories = ["command-line-utilities"]
 edition = "2024"
