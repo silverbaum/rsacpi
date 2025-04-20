@@ -7,7 +7,7 @@ use std::{
     io
 };
 
-const VERSION: &str = "0.4.0";
+const VERSION: &str = "0.4.1";
 
 struct Args {
 ///battery information
@@ -30,7 +30,8 @@ const PWDIR: &str = "/sys/class/power_supply";
 const THDIR: &str = "/sys/class/thermal";
 
 
-fn battery_design(dir: &str) -> Result<Vec<String>, io::Error> {
+fn battery_design(dir: &str) -> Result<Vec<String>, io::Error> 
+{
     let mut batteries: Vec<String> = Vec::new();
 
     let entries: Vec<_> = read_dir(dir)?
@@ -228,14 +229,9 @@ fn ac(acdir: &str) -> Result<String, io::Error>
 
       no_ac
 }
-fn usage() {
-    println!("Usage: rsacpi [-bita] [-e] [-h] [-v]\n\
-see rsacpi --help for more help information");
-    exit(1);
-}
 
-fn help() {
-println!("Usage: rsacpi [OPTION]...\n\n\
+fn usage() {
+    println!("Usage: rsacpi [OPTION]...\n\n\
 -b, --battery       battery information\n\
 -i, --health        battery health\n\
 -t, --thermal       temperatures from all thermal zones\n\
@@ -243,6 +239,7 @@ println!("Usage: rsacpi [OPTION]...\n\n\
 -e, --everything    all available information\n\
 -h, --help          command-line options\n\
 -v, --version       version and license information");
+    exit(1);
 }
 
 fn version() {
@@ -256,7 +253,8 @@ Report bugs at: <https://github.com/silverbaum/rsacpi>");
 }
 
 ///poor argument reaping and sowing embolism (parse)
-fn parse() -> Args {
+fn parse() -> Args 
+{
 
     let mut ac: bool = false;
     let mut battery: bool = false;
@@ -313,7 +311,7 @@ fn main() -> io::Result<()>
     let mut args = parse();
 
     if args.help {
-            help();
+            usage();
             return Ok(());
     } else if args.version {
             version();
