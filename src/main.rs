@@ -7,7 +7,7 @@ use std::{
     io
 };
 
-const VERSION: &str = "0.4.1";
+const VERSION: &str = "0.4.2";
 
 struct Args {
 ///battery information
@@ -46,12 +46,24 @@ fn battery_design(dir: &str) -> Result<Vec<String>, io::Error>
         let fname = entry.file_name();
         let file_name = fname.to_str().unwrap();
 
+        let voltage_r = match read_to_string(format!("{}/voltage_now", entry.path().to_string_lossy())) {
+            Ok(str) => str,
+            Err(_e) => "Err".to_owned()
+        };
+        let voltage: i128 = match voltage_r.trim().parse::<i128>() {
+            Ok(int) => int / 100000, //from uV, 10⁵ -> centivolts
+            Err(_e) => -1
+        };
+
+        
         let design_capr = match read_to_string(format!("{}/energy_full_design", entry.path().to_string_lossy())) {
             Ok(str) => str,
             Err(_) => "Unknown".to_owned()
             };
-        let design_cap: i32 = match design_capr.trim().parse::<i32>() {
-            Ok(int) => int / 10000,
+        let design_cap: i128 = match design_capr.trim().parse::<i128>() {
+            Ok(int) => {
+                if voltage != -1 {int/100 / (voltage)} else {int/1000} //convert from uWh to mAh if voltage is found, otherwise convert to mWh
+            },
             Err(e) => return Err(io::Error::other(format!("Unable to determine battery's design capacity: {e}")))
         };
 
@@ -59,14 +71,14 @@ fn battery_design(dir: &str) -> Result<Vec<String>, io::Error>
             Ok(str) => str,
             Err(_) => "Unknown".to_owned()
             };
-        let real_cap: i32 = match real_capr.trim().parse::<i32>() {
-            Ok(int) => int / 10000,
+        let real_cap: i128 = match real_capr.trim().parse::<i128>() {
+            Ok(int) => {if voltage != -1 {int/100 / voltage} else {int/1000}},
             Err(e) => return Err(io::Error::other(format!("Unable to determine battery capacity: {e}")))
         };
-        let battery_health : f64 = (<i32 as Into<f64>>::into(real_cap) / <i32 as Into<f64>>::into(design_cap)) * 100.0;
+        let battery_health : f64 = (<i32 as Into<f64>>::into(real_cap as i32) / <i32 as Into<f64>>::into(design_cap as i32)) * 100.0;
         
-
-        batteries.push(format!("{file_name}: {real_cap} / {design_cap} mAh = {:.1}%", battery_health));
+        let unit = if voltage != -1 {"mAh"} else {"mWh"};
+        batteries.push(format!("{file_name}: {real_cap} / {design_cap} {unit} = {:.1}%", battery_health));
     }
 
     Ok(batteries)
