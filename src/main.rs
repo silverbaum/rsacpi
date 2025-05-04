@@ -103,8 +103,13 @@ fn bat(dir: &str) -> Result<Vec<String>, io::Error>
         let file_namebuf = entry.file_name();
         let file_name = file_namebuf.to_str().unwrap();
 
-        let cap_path = format!("{}/capacity", entry.path().to_str().unwrap_or("/sys/class/power_supply/BAT0/capacity"));
-        let capacity_r = read_to_string(&cap_path)?;
+        let cap_path = format!("{}/capacity", entry.path().to_str().unwrap_or("/sys/class/power_supply/BAT0"));
+        let capacity_r = if let Ok(str) = read_to_string(&cap_path) {
+            str
+        } else {
+            eprintln!("No capacity information available");
+            String::from("")
+        };
         let capacity: i32 = capacity_r.trim().parse().unwrap_or(-1);
         
         let status_r = match read_to_string(format!("{}/status", entry.path().to_string_lossy())) {
@@ -115,24 +120,39 @@ fn bat(dir: &str) -> Result<Vec<String>, io::Error>
 
 
         //read raw charge and power consumption for time estimate
-        let energy_path = format!("{}/energy_now", entry.path().to_str().expect("Failed to convert to string"));
-        let energy_r = read_to_string(&energy_path)?;
+        let energy_path = format!("{}/energy_now", entry.path().to_str().expect("Failed to convert path to string"));
+        let energy_r = match read_to_string(&energy_path) {
+            Ok(str) => str,
+            Err(_) => {
+                eprintln!("Energy information unavailable");
+                String::from("")
+            }
+        };
+
         let energy: i64 = match energy_r.trim().parse() {
             Ok(int) => int,
             Err(_) => {
-                let reader = read(&energy_path)?;
-                let res: i64 = unsafe {(*reader.align_to::<i64>().1)[0]};
-                if res >= 0 {
+                match read(&energy_path) {
+                Ok(reader) => {
+                    let res: i64 = unsafe {(*reader.align_to::<i64>().1)[0]};
                     res
-                } else {
-                    -1
+                },
+                Err(_) => -1
                 }
             }};
-            
-        let power_r = read_to_string(format!("{}/power_now", entry.path().to_str().unwrap_or("oh no")));
-        let power: i64 = match power_r {
-            Ok(power_r) => power_r.trim().parse().unwrap_or(-1),
-            Err(_) => -1
+    
+
+        let power_r = match read_to_string(format!("{}/power_now", entry.path().to_str().unwrap_or("oh no"))) {
+            Ok(str) => str,
+            Err(_) => {
+                eprintln!("Power information unavailable");
+                String::from("")
+            }
+        };
+        let power: i64 = if power_r.is_empty() {
+             -1
+        } else {
+             power_r.trim().parse().unwrap_or(-1)
         };
 
         //shows estimate of time remaining
@@ -149,10 +169,20 @@ fn bat(dir: &str) -> Result<Vec<String>, io::Error>
         } else if capacity >= 0 {
                 batteries.push(format!("{file_name}: {}%, {}", capacity, status) );
         } else {
-                let capbuf = read(&cap_path)?;
-                let capstr = String::from_utf8(capbuf).unwrap();
-                batteries.push(format!("{file_name}: {}%, {}", capstr.trim(), status));
-            }
+                //let capbuf = read(&cap_path)?;
+                //let capstr = String::from_utf8(capbuf).unwrap();
+                //batteries.push(format!("{file_name}: {}%, {}", capstr.trim(), status));
+
+                if let Ok(reader) = read(&cap_path) {
+                    let capstr = String::from_utf8(reader).unwrap_or(String::from(""));
+                    if !capstr.is_empty() {
+                        batteries.push(format!("{file_name}: {}%, {}", capstr.trim(), status));
+                    }
+                } 
+                
+
+        }
+        
         
         found = true;
     }
