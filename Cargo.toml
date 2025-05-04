@@ -1,7 +1,7 @@
 [package]
 name = "rsacpi"
 description = "A simple command-line tool with no dependencies to display battery, ac, and thermal information on Linux"
-version = "0.4.2"
+version = "0.4.3"
 repository = "https://github.com/silverbaum/rsacpi"
 license = "MIT"
 keywords = ["battery", "cli"]

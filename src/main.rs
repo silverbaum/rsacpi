@@ -7,7 +7,7 @@ use std::{
     io
 };
 
-const VERSION: &str = "0.4.2";
+const VERSION: &str = "0.4.3";
 
 struct Args {
 ///battery information
