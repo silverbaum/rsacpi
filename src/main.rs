@@ -104,56 +104,49 @@ fn bat(dir: &str) -> Result<Vec<String>, io::Error>
         let file_name = file_namebuf.to_str().unwrap();
 
         let cap_path = format!("{}/capacity", entry.path().to_str().unwrap_or("/sys/class/power_supply/BAT0"));
-        let capacity_r = if let Ok(str) = read_to_string(&cap_path) {
-            str
+        let capacity = 
+        if let Ok(capacity_r) = read_to_string(&cap_path){
+            capacity_r.trim().parse().unwrap_or(-1)
         } else {
-            eprintln!("No capacity information available");
-            String::from("")
+            -1
         };
-        let capacity: i32 = capacity_r.trim().parse().unwrap_or(-1);
         
-        let status_r = match read_to_string(format!("{}/status", entry.path().to_string_lossy())) {
-                        Ok(str) => str,
-                        Err(_) => "Unknown".to_owned()
-                        };
-        let status: &str = status_r.trim();
-
+        let status = read_to_string(format!("{}/status", entry.path().to_string_lossy())).unwrap_or("Unknown".to_string()); 
 
         //read raw charge and power consumption for time estimate
         let energy_path = format!("{}/energy_now", entry.path().to_str().expect("Failed to convert path to string"));
-        let energy_r = match read_to_string(&energy_path) {
-            Ok(str) => str,
-            Err(_) => {
-                eprintln!("Energy information unavailable");
-                String::from("")
-            }
-        };
-
-        let energy: i64 = match energy_r.trim().parse() {
-            Ok(int) => int,
-            Err(_) => {
-                match read(&energy_path) {
-                Ok(reader) => {
-                    let res: i64 = unsafe {(*reader.align_to::<i64>().1)[0]};
-                    res
-                },
-                Err(_) => -1
+        let energy = if let Ok(energy_r) = read_to_string(&energy_path) {
+            
+            match energy_r.trim().parse() {
+                Ok(int) => int,
+                Err(_) => {
+                    match read(&energy_path) {
+                        Ok(reader) => {
+                            let res: i64 = unsafe {(*reader.align_to::<i64>().1)[0]};
+                            res
+                        },
+                        Err(_) => -1
+                    }
                 }
-            }};
-    
-
-        let power_r = match read_to_string(format!("{}/power_now", entry.path().to_str().unwrap_or("oh no"))) {
-            Ok(str) => str,
-            Err(_) => {
-                eprintln!("Power information unavailable");
-                String::from("")
             }
-        };
-        let power: i64 = if power_r.is_empty() {
-             -1
         } else {
-             power_r.trim().parse().unwrap_or(-1)
+            -1
         };
+
+        
+
+        let power = if let Ok(power_r) = read_to_string(format!("{}/power_now", entry.path().to_str().unwrap_or("oh no"))) {
+    
+        
+            if power_r.is_empty() {
+                -1
+            } else {
+                power_r.trim().parse().unwrap_or(-1)
+            }
+        } else {
+            -1
+        };
+        
 
         //shows estimate of time remaining
         if energy > 0 && power > 0 && capacity >= 0 && status == "Discharging" {
@@ -166,18 +159,19 @@ fn bat(dir: &str) -> Result<Vec<String>, io::Error>
                 let remaining = format!("{}h {}m", hours, minutes);
                 batteries.push(format!("{file_name}: {}%, {}, {} remaining", capacity, status, remaining) );
             }
+        } else if capacity >= 0 && status != "Unknown" {
+            batteries.push(format!("{file_name}: {}%, {}", capacity, status) )
         } else if capacity >= 0 {
                 batteries.push(format!("{file_name}: {}%, {}", capacity, status) );
         } else {
-                //let capbuf = read(&cap_path)?;
-                //let capstr = String::from_utf8(capbuf).unwrap();
-                //batteries.push(format!("{file_name}: {}%, {}", capstr.trim(), status));
 
                 if let Ok(reader) = read(&cap_path) {
                     let capstr = String::from_utf8(reader).unwrap_or(String::from(""));
                     if !capstr.is_empty() {
                         batteries.push(format!("{file_name}: {}%, {}", capstr.trim(), status));
                     }
+                } else {
+                    return Err(io::Error::other("No battery information"));
                 } 
                 
 
@@ -386,7 +380,7 @@ fn main() -> io::Result<()>
                     println!("{temp}");
                 }
             },
-            Err(e) => return Err(io::Error::other(e))
+            Err(e) => eprintln!("{e}")
             }
     }
     
