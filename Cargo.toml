@@ -7,3 +7,5 @@ license = "MIT"
 keywords = ["battery", "cli"]
 categories = ["command-line-utilities"]
 edition = "2024"
+[profile.release]
+opt-level = "s"

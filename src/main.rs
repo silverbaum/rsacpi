@@ -35,7 +35,7 @@ fn battery_design(dir: &str) -> Result<Vec<String>, io::Error>
     let mut batteries: Vec<String> = Vec::new();
 
     let entries: Vec<_> = read_dir(dir)?
-                .map(|e| {e.unwrap_or_else(|er| panic!("{er}"))})
+                .map(|e| {e.unwrap_or_else(|er| panic!("{}", er))})
                 .filter(|entry| {
                     entry.file_name().to_string_lossy().contains("BAT") 
                  || entry.file_name().to_string_lossy().contains("bat")
@@ -91,7 +91,7 @@ fn bat(dir: &str) -> Result<Vec<String>, io::Error>
     let mut found = false;
 
     let entries: Vec<_> = read_dir(dir)?
-                .map(|e| {e.unwrap_or_else(|er| panic!("{er}"))})
+                .map(|e| {e.unwrap_or_else(|er| panic!("{}", er))})
                 .filter(|entry| {
                     entry.file_name().to_string_lossy().contains("BAT") 
                  || entry.file_name().to_string_lossy().contains("bat")
@@ -111,7 +111,10 @@ fn bat(dir: &str) -> Result<Vec<String>, io::Error>
             -1
         };
         
-        let status = read_to_string(format!("{}/status", entry.path().to_string_lossy())).unwrap_or("Unknown".to_string()); 
+        
+        let status_r = read_to_string(format!("{}/status", entry.path().to_string_lossy())).unwrap_or("Unknown".to_string()); 
+        let status = status_r.trim();
+        
 
         //read raw charge and power consumption for time estimate
         let energy_path = format!("{}/energy_now", entry.path().to_str().expect("Failed to convert path to string"));
@@ -164,7 +167,6 @@ fn bat(dir: &str) -> Result<Vec<String>, io::Error>
         } else if capacity >= 0 {
                 batteries.push(format!("{file_name}: {}%, {}", capacity, status) );
         } else {
-
                 if let Ok(reader) = read(&cap_path) {
                     let capstr = String::from_utf8(reader).unwrap_or(String::from(""));
                     if !capstr.is_empty() {
