@@ -1,3 +1,5 @@
+![Crates.io Version](https://img.shields.io/crates/v/rsacpi)
+
 rsacpi is the (rust) small and clumsy power information tool 
 
 It is a simple command-line tool for Linux to display battery, ac, and thermal information contained in sys/class
