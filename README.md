@@ -1,4 +1,4 @@
-![Crates.io Version](https://img.shields.io/crates/v/rsacpi)
+[![Crates.io Version](https://img.shields.io/crates/v/rsacpi)](https://crates.io/crates/rsacpi)
 
 rsacpi is the (rust) small and clumsy power information tool 
 
